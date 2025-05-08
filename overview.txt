@@ -1,0 +1,188 @@
+Enhanced Project Structure Suggestion
+MAZE ESCAPE:.
+│   .gitignore
+│   CMakeLists.txt
+│   overview.txt
+│   README.md
+│
+├───build
+│       (CMake generated files)
+│
+├───external
+│   │   stb_image.c       // Implementation file for stb_image
+│   │   stb_image.h
+│   ├───glad
+│   │   └───src
+│   │       └───glad.c    // GLAD implementation file
+│   ├───glfw
+│   │       (GLFW library files, or header-only if built separately)
+│   └───glm
+│           (GLM header files)
+│
+├───shaders
+│   │   wall.frag
+│   │   wall.vert
+│   │   floor.frag
+│   │   floor.vert
+│   │   exit.frag
+│   │   exit.vert
+│   │   skybox.frag     // For later
+│   │   skybox.vert     // For later
+│
+├───src
+│   │   main.cpp
+│   │
+│   ├───Core
+│   │   │   Application.h
+│   │   │   Application.cpp
+│   │   │   Input.h
+│   │   │   Input.cpp
+│   │   │   Time.h         // For delta time calculation
+│   │   │   Time.cpp
+│   │
+│   ├───Graphics
+│   │   │   Camera.h
+│   │   │   Camera.cpp
+│   │   │   Mesh.h         // Represents VAO, VBO, EBO, vertex count
+│   │   │   Mesh.cpp
+│   │   │   Model.h        // Could be a collection of meshes, or a simpler primitive
+│   │   │   Model.cpp
+│   │   │   Renderer.h     // Handles draw calls, clear screen etc.
+│   │   │   Renderer.cpp
+│   │   │   Shader.h
+│   │   │   Shader.cpp
+│   │   │   Texture.h
+│   │   │   Texture.cpp
+│   │   │   Light.h        // For later (e.g. point lights, directional light)
+│   │   │   Light.cpp
+│   │
+│   ├───Game
+│   │   │   Maze.h
+│   │   │   Maze.cpp
+│   │   │   Player.h
+│   │   │   Player.cpp
+│   │   │   GameLogic.h    // Manages game state, win/lose conditions
+│   │   │   GameLogic.cpp
+│   │
+│   └───Utils
+│       │   FileSystem.h   // Helper for paths
+│       │   FileSystem.cpp
+│       │   Logging.h      // Simple logging
+│       │   Logging.cpp
+│
+└───textures
+    │   wall.png
+    │   floor.png
+    │   ceiling.png
+    │   exit_sign.png
+    │   skybox_right.jpg  // For later
+    │   skybox_left.jpg
+    │   skybox_top.jpg
+    │   skybox_bottom.jpg
+    │   skybox_front.jpg
+    │   skybox_back.jpg
+
+
+Why these changes/additions?
+stb_image.c and glad.c: These libraries often require one .c file to be compiled into your project.
+src/Core: For fundamental application-level concerns like the main loop, input handling, and time management.
+src/Graphics: All OpenGL-specific rendering code, camera, shaders, textures, meshes.
+src/Game: Game-specific logic like maze generation, player state, win conditions.
+src/Utils: General utility functions that don't fit elsewhere.
+More specific shader files (you'll likely want different shaders for different objects).
+More specific texture files.
+
+Overall Steps to Build the Maze Escape Game
+
+Here's a high-level roadmap:
+
+Phase 0: Project Setup & Basic Window
+Environment Setup: Ensure compiler, CMake, and necessary development tools are installed.
+CMake Configuration: Write CMakeLists.txt to include GLFW, GLAD, GLM, and stb_image.
+Window Creation: Use GLFW to create an OpenGL window.
+GLAD Initialization: Initialize GLAD to load OpenGL function pointers.
+Basic Game Loop: Create a loop that keeps the window open, processes input, and clears the screen to a color.
+
+Phase 1: Rendering Basics - The First Cube
+6. Shader Class: Create a Shader class to load, compile, and link vertex and fragment shaders from files.
+7. Vertex Data: Define vertices for a simple cube.
+8. Buffers (VBO, VAO, EBO): Create Vertex Buffer Objects (VBOs) to send vertex data to the GPU, and Vertex Array Objects (VAOs) to store buffer configurations. Use Element Buffer Objects (EBOs) for indexed drawing.
+9. Basic Shaders: Write simple vertex and fragment shaders to draw the cube in a solid color.
+10. Transformations (MVP Matrices): Introduce Model, View, and Projection matrices using GLM. Send them to the shader as uniforms.
+11. Camera Class (Static): Create a basic Camera class that manages the View and Projection matrices. Initially, it can be static.
+12. Render a Cube: Draw the cube using the shaders and transformations.
+
+Phase 2: First-Person Camera & Movement
+13. Camera Movement: Enhance the Camera class to support first-person movement (forward/backward, strafe left/right) and mouse-look (pitch/yaw).
+14. Input Handling: Implement input processing (keyboard for movement, mouse for looking) in Input.cpp and use it in Application.cpp to update the camera.
+15. Delta Time: Implement time-step independence for smooth movement across different hardware.
+
+Phase 3: Procedural Maze Generation
+16. Maze Data Structure: Define a Cell struct/class and a 2D grid (e.g., std::vector<std::vector<Cell>>) to represent the maze. Each cell should know about its walls (e.g., bool N, S, E, W).
+17. Maze Generation Algorithm: Implement a maze generation algorithm. Recursive Backtracker is a good choice as it tends to create long corridors and guarantees a path.
+* Mark start and end cells.
+* Ensure the "no isolated cell/row" constraint is met (Recursive Backtracker usually handles this well if it explores the whole grid).
+18. Maze Class: Encapsulate the maze data and generation logic within a Maze class.
+
+Phase 4: Rendering the Maze
+###############################
+19. Wall Geometry: Decide how to represent walls. Individual cubes are straightforward to start with.
+20. Floor and Ceiling: Create large quads for the floor and ceiling.
+21. Instancing (Optional but Recommended): If using many identical wall cubes, consider instanced rendering for performance. For now, drawing individual cubes is fine.
+22. Renderer Class: Refactor drawing logic into a Renderer class.
+23. Maze Traversal & Rendering: Iterate through your Maze data structure. For each cell, determine where walls exist and render a cube (or quad) at that position.
+24. Texture Loading: Create a Texture class using stb_image.h to load image files (e.g., wall.png, floor.png).
+25. Texturing: Apply textures to walls, floor, and ceiling using texture coordinates in your vertex data and sampler2D uniforms in your fragment shaders.
+
+Phase 5: Player Interaction & Game Logic
+26. Player Class: Create a Player class. It will hold its position, size (for collision), and potentially link to the Camera.
+27. Collision Detection (AABB): Implement Axis-Aligned Bounding Box (AABB) collision detection between the player and the maze walls.
+28. Collision Response: Prevent the player from moving through walls.
+29. Exit Condition: Define the "exit" cell. Render a distinct visual cue there (e.g., a textured quad with an "EXIT" sign).
+30. Win Condition: In your game loop/GameLogic class, check if the player's position overlaps with the exit cell.
+31. Game State: Introduce a simple game state (e.g., PLAYING, WON).
+
+Phase 6: Polish and Enhancements
+32. Basic Lighting: Implement simple Phong lighting (ambient, diffuse, specular) to give the scene more depth. Start with a single directional light or point light.
+33. Skybox: Add a skybox for a more immersive environment.
+34. User Interface (Minimal): Display simple text like "Find the Exit!" or "You Won!" (This can be tricky in raw OpenGL; consider a library like Dear ImGui for complex UI later, or simple textured quads for now).
+35. Sound Effects (Optional): Add footstep sounds, a win sound. (Requires an audio library like OpenAL or SDL_mixer).
+
+Phase 7: Future Features (Monsters & Shooting)
+36. Monster AI: Basic pathfinding (e.g., A* on the maze grid) or simpler "follow player if in sight" logic.
+37. Monster Rendering: Create/load monster models and animate them.
+38. Shooting Mechanics: Implement projectile launching, collision detection for projectiles.
+39. Health System: For player and monsters.
+
+Phase 8: Adding prefab Models
+40. Load 3D models from OBJ files.
+41. Create a Model class to handle model loading and rendering.
+42. Integrate models into the game: player, monsters, projectiles, etc.
+
+Phase 9: Menus and Game Levels.
+43. Create a menu system for start, options, and exit.
+44. Implement multiple levels with increasing difficulty.
+45. Add power-ups and hazards.
+
+Phase 11: Online Leaderboard (Optional)
+46. Implement a simple online leaderboard.
+47. Submit scores to a server.
+48. Display top scores in the menu.
+
+Phase 12: Online Mutiplayer Setup
+49. Setup a server for multiplayer.
+50. Implement client-server communication.
+51. Synchronize game state between clients.
+
+Phase 13: Ads and Monetization
+52. Integrate ads (e.g., Google AdMob).
+53. In-app purchases for premium features.
+
+Phase 14: Optimization
+54. Profile and optimize performance bottlenecks.
+55. Implement level of detail (LOD) for distance objects.
+56. Use instancing for repeated objects.
+
+This is a marathon, not a sprint! 
+Each step has its own learning curve. 
+We'll tackle them one by one.
