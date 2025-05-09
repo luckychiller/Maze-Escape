@@ -125,11 +125,11 @@ Phase 3: Procedural Maze Generation
 18. Maze Class: Encapsulate the maze data and generation logic within a Maze class.
 
 Phase 4: Rendering the Maze
-###############################
 19. Wall Geometry: Decide how to represent walls. Individual cubes are straightforward to start with.
 20. Floor and Ceiling: Create large quads for the floor and ceiling.
 21. Instancing (Optional but Recommended): If using many identical wall cubes, consider instanced rendering for performance. For now, drawing individual cubes is fine.
 22. Renderer Class: Refactor drawing logic into a Renderer class.
+###############################
 23. Maze Traversal & Rendering: Iterate through your Maze data structure. For each cell, determine where walls exist and render a cube (or quad) at that position.
 24. Texture Loading: Create a Texture class using stb_image.h to load image files (e.g., wall.png, floor.png).
 25. Texturing: Apply textures to walls, floor, and ceiling using texture coordinates in your vertex data and sampler2D uniforms in your fragment shaders.
