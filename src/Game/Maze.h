@@ -39,6 +39,9 @@ public:
     // For debugging: Print the maze to console
     void PrintToConsole() const;
 
+    // Print the maze to console with player position
+    void PrintToConsole(const glm::ivec2& playerPos) const;
+
     int GetWidth() const ;
     int GetHeight() const ;
 

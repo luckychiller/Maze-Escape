@@ -2,11 +2,11 @@
 #include <chrono> // For seeding the random number generator
 
 Maze::Maze(int width, int height) : M_Width(width), M_Height(height) {
-    if (M_Width <= 0 || M_Height <= 0) {
+    if (M_Width <= 2 || M_Height <= 2) {
         // Handle invalid dimensions, e.g., throw an error or default to a minimum size
-        M_Width = 10;
-        M_Height = 10;
-        std::cerr << "Warning: Invalid maze dimensions. Defaulting to 10x10." << std::endl;
+        M_Width = 2;
+        M_Height = 2;
+        std::cerr << "Warning: Invalid maze dimensions. Defaulting to 2x2." << std::endl;
     }
 
     // Initialize the grid with default cells (all walls up, not visited)
@@ -40,7 +40,7 @@ void Maze::GenerateMaze(int startX, int startY) {
             M_Grid[y][x].wallRight = true;
         }
     }
-    
+
     // Set start and end points (simple example: start at (startX, startY), end at bottom-right)
     // You can make this more sophisticated later
     M_Grid[startY][startX].isStart = true;
@@ -98,11 +98,11 @@ void Maze::GenerateMaze(int startX, int startY) {
             // Choose a random unvisited neighbor
             std::uniform_int_distribution<> distrib(0, neighbors.size() - 1);
             int choice = distrib(M_Rng);
-            
+
             std::pair<int, int> nextCoords = neighbors[choice];
             int nx = nextCoords.first;
             int ny = nextCoords.second;
-            
+
             int direction_tuple_idx = neighbor_indices_in_directions[choice].first;
 
             // Remove walls
@@ -144,7 +144,7 @@ void Maze::GenerateMaze(int startX, int startY) {
         else if (endY < M_Height - 1 && !M_Grid[endY+1][endX].wallTop) { M_Grid[endY][endX].wallBottom = false; opened = true; } // Path from below
         else if (endX > 0 && !M_Grid[endY][endX-1].wallRight) { M_Grid[endY][endX].wallLeft = false; opened = true; } // Path from left
         else if (endX < M_Width - 1 && !M_Grid[endY][endX+1].wallLeft) { M_Grid[endY][endX].wallRight = false; opened = true; } // Path from right
-        
+
         // Fallback if it's a corner or enclosed space, just open one outer wall
         if(!opened){
             if (endY == M_Height - 1) M_Grid[endY][endX].wallBottom = false;
@@ -174,6 +174,11 @@ const Cell& Maze::GetCell(int x, int y) const {
 }
 
 void Maze::PrintToConsole() const {
+    // Call the overloaded method with an invalid player position
+    PrintToConsole(glm::ivec2(-1, -1));
+}
+
+void Maze::PrintToConsole(const glm::ivec2& playerPos) const {
     for (int y = 0; y < M_Height; ++y) {
         // Print top walls of cells in this row
         for (int x = 0; x < M_Width; ++x) {
@@ -186,8 +191,19 @@ void Maze::PrintToConsole() const {
         for (int x = 0; x < M_Width; ++x) {
             std::cout << (M_Grid[y][x].wallLeft ? "|" : " ");
             char content = ' ';
-            if (M_Grid[y][x].isStart) content = 'S';
-            else if (M_Grid[y][x].isEnd) content = 'E';
+
+            // Check if this is the player's position
+            if (x == playerPos.x && y == playerPos.y) {
+                content = 'P';
+            }
+            // Otherwise, show start or end markers
+            else if (M_Grid[y][x].isStart) {
+                content = 'S';
+            }
+            else if (M_Grid[y][x].isEnd) {
+                content = 'E';
+            }
+
             std::cout << " " << content << " ";
         }
         std::cout << (M_Grid[y][M_Width-1].wallRight ? "|" : " ") << std::endl; // Right wall of last cell in row
@@ -198,6 +214,9 @@ void Maze::PrintToConsole() const {
         std::cout << (M_Grid[M_Height-1][x].wallBottom ? "---" : "   ");
     }
     std::cout << "+" << std::endl;
+
+    // Print legend
+    std::cout << "Legend: P = Player, S = Start, E = End" << std::endl;
 }
 
 int Maze::GetWidth() const {
@@ -262,7 +281,7 @@ glm::ivec2 Maze::GetEndCellCoords() const {
         }
     }
     return glm::ivec2(-1, -1); // Invalid coordinates
-} 
+}
 
 
 

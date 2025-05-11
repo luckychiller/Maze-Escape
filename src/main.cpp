@@ -15,6 +15,8 @@
 #include "Graphics/Mesh.h"
 #include "Graphics/Renderer.h"
 #include "Graphics/Texture.h"
+#include "Game/Player.h"
+#include "Game/GameLogic.h"
 
 // Window dimensions
 unsigned int SCR_WIDTH = 1280;
@@ -29,6 +31,9 @@ bool firstMouse = true;
 // Time
 float deltaTime = 0.0f; // Time between current frame and last frame
 float lastFrame = 0.0f; // Time of last frame
+
+// Key press debounce
+bool pKeyPressed = false;
 
 // Maze properties
 const float wallHeight = 2.0f;
@@ -75,7 +80,12 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
 
-// Process camera movement from keys input
+// Forward declaration for processInput
+Player* g_Player = nullptr;
+Maze* g_Maze = nullptr;
+GameLogic* g_GameLogic = nullptr;
+
+// Process player movement from keys input
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -83,31 +93,24 @@ void processInput(GLFWwindow *window)
         glfwSetWindowShouldClose(window, true);
     }
 
-    float cameraSpeed = 2.5f * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    // Check if player and maze are initialized
+    if (!g_Player || !g_Maze)
     {
-        camera.ProcessKeyboard(FORWARD, deltaTime);
+        return;
     }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+
+    // Check if game is won
+    if (g_GameLogic && g_GameLogic->GetState() == GameState::WON)
     {
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
+        // If R key is pressed, reset the game
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+        {
+            g_GameLogic->Reset();
+        }
+        return; // Don't process movement if game is won
     }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-    {
-        camera.ProcessKeyboard(LEFT, deltaTime);
-    }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-    {
-        camera.ProcessKeyboard(RIGHT, deltaTime);
-    }
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-    {
-        camera.ProcessKeyboard(UP, deltaTime);
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-    {
-        camera.ProcessKeyboard(DOWN, deltaTime);
-    }
+
+    // Set movement speed
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
     {
         // move faster
@@ -116,6 +119,32 @@ void processInput(GLFWwindow *window)
     else
     {
         camera.MovementSpeed = 2.5f;
+    }
+
+    // Process movement with collision detection
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        g_Player->ProcessKeyboard(FORWARD, deltaTime, *g_Maze);
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        g_Player->ProcessKeyboard(BACKWARD, deltaTime, *g_Maze);
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    {
+        g_Player->ProcessKeyboard(LEFT, deltaTime, *g_Maze);
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        g_Player->ProcessKeyboard(RIGHT, deltaTime, *g_Maze);
+    }
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    {
+        g_Player->ProcessKeyboard(UP, deltaTime, *g_Maze);
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    {
+        g_Player->ProcessKeyboard(DOWN, deltaTime, *g_Maze);
     }
 }
 
@@ -211,15 +240,33 @@ int main() {
     Renderer renderer;
 
     // Create and generate maze
-    int mazeGridW = 15; // For clarity with maze size vs world units
-    int mazeGridH = 15;
+    int mazeGridW = 5; // For clarity with maze size vs world units
+    int mazeGridH = 5;
     Maze gameMaze(mazeGridW, mazeGridH);
     gameMaze.GenerateMaze(0, 0);
     gameMaze.PrintToConsole();
-    // Position camera within the maze
 
+    // Set global maze pointer for input processing
+    g_Maze = &gameMaze;
+
+    // Position camera within the maze
     camera.Position = glm::vec3( (float)mazeGridW / 2.0f, wallHeight / 2.0f, (float)mazeGridH / 2.0f );
     camera.UpdateCameraVectors();
+
+    // Create player and game logic
+    Player player(camera);
+    GameLogic gameLogic(player, gameMaze);
+
+    // Set global pointers for input processing
+    g_Player = &player;
+    g_GameLogic = &gameLogic;
+
+    // Position player at the start cell
+    gameLogic.Reset();
+
+    // Print instructions
+    std::cout << "Press P to view the maze with your current position." << std::endl;
+    std::cout << "Press R to restart the game after reaching the exit." << std::endl;
 
     // --- Shaders (Construct directly) ---
     Shader wallShader("shaders/wall.vert", "shaders/wall.frag");
@@ -239,6 +286,7 @@ int main() {
     std::unique_ptr<Texture> wallTexture = std::make_unique<Texture>("textures/wall.jpg");
     std::unique_ptr<Texture> floorTexture = std::make_unique<Texture>("textures/floor.jpg");
     std::unique_ptr<Texture> ceilingTexture = std::make_unique<Texture>("textures/ceiling.jpg");
+    std::unique_ptr<Texture> exitTexture = std::make_unique<Texture>("textures/exit.jpg");
 
     // Cube vertices for walls with proper texture coordinates for each face
     std::vector<Vertex> cubeVerticesData = {
@@ -306,6 +354,17 @@ int main() {
     std::unique_ptr<Mesh> planeMesh = std::make_unique<Mesh>(planeVerticesData, planeIndicesData);
 
 
+    // Create exit marker mesh (a simple colored cube)
+    std::vector<Vertex> exitMarkerVerticesData = cubeVerticesData; // Use same vertices as cube
+    std::vector<unsigned int> exitMarkerIndicesData = cubeIndicesData; // Use same indices as cube
+    std::unique_ptr<Mesh> exitMarkerMesh = std::make_unique<Mesh>(exitMarkerVerticesData, exitMarkerIndicesData);
+
+    // Create exit marker shader
+    Shader exitMarkerShader("shaders/exit.vert", "shaders/exit.frag");
+    if (exitMarkerShader.ID == 0) {
+        std::cerr << "Failed to load exit marker shader." << std::endl; return -1;
+    }
+
     // --- Game Loop ---
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime());
@@ -313,6 +372,23 @@ int main() {
         lastFrame = currentFrame;
 
         processInput(window);
+
+        // Update player and game logic
+        player.Update(deltaTime, gameMaze);
+        gameLogic.Update(deltaTime);
+
+        // Print maze with player position when P key is pressed (with debounce)
+        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+            if (!pKeyPressed) {
+                // Clear console (Windows-specific)
+                system("cls");
+                // Print maze with player position
+                gameMaze.PrintToConsole(player.GetCurrentCell());
+                pKeyPressed = true;
+            }
+        } else {
+            pKeyPressed = false;
+        }
 
         renderer.Clear(); // Use renderer to clear screen
         renderer.BeginScene(camera, (float)SCR_WIDTH, (float)SCR_HEIGHT);
@@ -379,6 +455,31 @@ int main() {
                 }
             }
         }
+
+        // Render exit marker
+        exitMarkerShader.use();
+        renderer.SetShaderMatrices(exitMarkerShader);
+        exitTexture->Bind(0);
+        exitMarkerShader.setInt("exitTexture", 0);
+        glm::ivec2 exitCoords = gameMaze.GetEndCellCoords();
+        if (exitCoords.x >= 0 && exitCoords.y >= 0)
+        {
+            glm::vec3 exitPosition = glm::vec3(exitCoords.x + 0.5f, 0.5f, exitCoords.y + 0.5f);
+            glm::mat4 exitModel = glm::mat4(1.0f);
+            exitModel = glm::translate(exitModel, exitPosition);
+            exitModel = glm::scale(exitModel, glm::vec3(0.3f, 0.3f, 0.3f));
+            exitMarkerShader.setVec3("color", glm::vec3(1.0f, 1.0f, 1.0f)); // No tint
+            renderer.Submit(exitMarkerShader, *exitMarkerMesh, exitModel);
+        }
+
+        // Display game state
+        if (gameLogic.GetState() == GameState::WON)
+        {
+            // In a real game, you would render text or a UI element here
+            // For now, we just print to the console (already done in GameLogic::CheckWinCondition)
+            // You could add a 2D overlay with text or a simple colored quad
+        }
+
         // renderer.EndScene(); // Call if it does something
 
         glfwSwapBuffers(window);
