@@ -8,7 +8,7 @@
 struct Vertex {
     glm::vec3 Position;
     glm::vec2 TexCoords;
-    // glm::vec3 Normal; // For lighting later
+    glm::vec3 Normal; // For lighting later
 };
 
 class Shader; // Forward declaration of Shader class

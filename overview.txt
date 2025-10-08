@@ -96,6 +96,7 @@ Overall Steps to Build the Maze Escape Game
 
 Here's a high-level roadmap:
 
+################### completed ##########################
 Phase 0: Project Setup & Basic Window
 Environment Setup: Ensure compiler, CMake, and necessary development tools are installed.
 CMake Configuration: Write CMakeLists.txt to include GLFW, GLAD, GLM, and stb_image.
@@ -133,7 +134,6 @@ Phase 4: Rendering the Maze
 24. Texture Loading: Create a Texture class using stb_image.h to load image files (e.g., wall.png, floor.png).
 25. Texturing: Apply textures to walls, floor, and ceiling using texture coordinates in your vertex data and sampler2D uniforms in your fragment shaders.
 
-###############################
 Phase 5: Player Interaction & Game Logic
 26. Player Class: Create a Player class. It will hold its position, size (for collision), and potentially link to the Camera.
 27. Collision Detection (AABB): Implement Axis-Aligned Bounding Box (AABB) collision detection between the player and the maze walls.
@@ -144,6 +144,7 @@ Phase 5: Player Interaction & Game Logic
 
 Phase 6: Polish and Enhancements
 32. Basic Lighting: Implement simple Phong lighting (ambient, diffuse, specular) to give the scene more depth. Start with a single directional light or point light.
+############### here we are ################
 33. Skybox: Add a skybox for a more immersive environment.
 34. User Interface (Minimal): Display simple text like "Find the Exit!" or "You Won!" (This can be tricky in raw OpenGL; consider a library like Dear ImGui for complex UI later, or simple textured quads for now).
 35. Sound Effects (Optional): Add footstep sounds, a win sound. (Requires an audio library like OpenAL or SDL_mixer).
@@ -186,3 +187,434 @@ Phase 14: Optimization
 This is a marathon, not a sprint! 
 Each step has its own learning curve. 
 We'll tackle them one by one.
+
+
+
+#######################################################
+
+Excellent! Having basic Phong lighting implemented is a major visual upgrade. 
+Your maze should look much more three-dimensional and atmospheric now.
+
+We're still in Phase 6: Polish and Enhancements. 
+The next logical step to enhance the visual immersion is Step 33: Skybox.
+
+A skybox is essentially a large cube that surrounds your entire scene, textured on its inside faces with images of a sky or distant environment. This prevents the player from seeing into an empty void beyond the rendered scene.
+
+Here's how we'll approach it:
+
+Skybox Vertices: Define vertices for a large cube.
+
+Cubemap Texture: Load 6 individual texture faces (front, back, top, bottom, left, right) into a single OpenGL cubemap texture object.
+
+Skybox Shaders: Create new vertex and fragment shaders specifically for the skybox.
+
+The vertex shader's main job is to pass through vertex positions and transform them using view/projection, but with a trick to ensure the skybox always appears behind everything else.
+
+The fragment shader samples from the cubemap texture.
+
+Rendering the Skybox: Draw the skybox cube first in your render loop (or last with depth testing tricks).
+
+Step 33.1: Skybox Vertices
+
+We can reuse a standard cube definition, but its coordinates will be used differently by the skybox vertex shader.
+(In main.cpp for now, or create a skybox-specific mesh)
+
+float skyboxVertices[] = {
+    // positions
+    -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+
+     1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+
+    -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f
+};
+// No indices needed for skybox if drawing with glDrawArrays and vertices are defined for 36 points.
+// Or define 8 unique vertices and 36 indices. For simplicity, 36 vertices directly.
+
+
+This defines a unit cube (36 vertices for 12 triangles).
+
+Step 33.2: Cubemap Texture Loading
+
+You'll need 6 images for the skybox faces. The order typically matters for loading into a cubemap. A common order is:
+
+Right (GL_TEXTURE_CUBE_MAP_POSITIVE_X)
+
+Left (GL_TEXTURE_CUBE_MAP_NEGATIVE_X)
+
+Top (GL_TEXTURE_CUBE_MAP_POSITIVE_Y)
+
+Bottom (GL_TEXTURE_CUBE_MAP_NEGATIVE_Y)
+
+Front (GL_TEXTURE_CUBE_MAP_POSITIVE_Z) (often called "back" in some conventions)
+
+Back (GL_TEXTURE_CUBE_MAP_NEGATIVE_Z) (often called "front")
+
+Let's assume you have these files in textures/skybox/:
+
+textures/skybox/right.jpg
+
+textures/skybox/left.jpg
+
+textures/skybox/top.jpg
+
+textures/skybox/bottom.jpg
+
+textures/skybox/front.jpg
+
+textures/skybox/back.jpg
+
+We'll need a new function or modify our Texture class to load cubemaps. For now, let's create a standalone function in main.cpp or a helper file.
+
+Function to load a cubemap (e.g., in main.cpp or a new Utils/TextureLoader.cpp):
+
+// Helper function to load a cubemap
+unsigned int loadCubemap(const std::vector<std::string>& faces, bool flipVerticallyOnLoad = false) {
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    stbi_set_flip_vertically_on_load(flipVerticallyOnLoad); // Usually false for cubemaps from common tools
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++) {
+        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data) {
+            GLenum format = GL_RGB;
+            if (nrChannels == 1) format = GL_RED;
+            else if (nrChannels == 3) format = GL_RGB;
+            else if (nrChannels == 4) format = GL_RGBA;
+
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                         0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+            stbi_image_free(data);
+            std::cout << "Cubemap texture loaded: " << faces[i] << std::endl;
+        } else {
+            std::cerr << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data); // data is null, but call for consistency
+            return 0; // Return 0 on failure
+        }
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE); // For the R coord of cubemap
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0); // Unbind
+    return textureID;
+}
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+C++
+IGNORE_WHEN_COPYING_END
+
+stbi_set_flip_vertically_on_load(false): Often, cubemap faces are already oriented correctly, so flipping might not be needed. Test this.
+
+GL_TEXTURE_CUBE_MAP_POSITIVE_X + i: This conveniently maps the loop index to the correct cubemap face enum.
+
+GL_CLAMP_TO_EDGE: Important for wrap mode to avoid seams at cube edges.
+
+Step 33.3: Skybox Shaders
+
+shaders/skybox.vert:
+
+#version 330 core
+layout (location = 0) in vec3 aPos;
+
+out vec3 TexCoords; // Will be the vertex position, used as direction vector
+
+uniform mat4 projection;
+uniform mat4 view; // View matrix without translation
+
+void main() {
+    TexCoords = aPos; // Pass vertex position directly as texture coordinate for cubemap
+    
+    // Remove translation from the view matrix to make skybox follow camera
+    mat4 viewNoTranslation = mat4(mat3(view)); 
+    vec4 pos = projection * viewNoTranslation * vec4(aPos, 1.0);
+    
+    // Ensure skybox is always at the far plane (depth = 1.0)
+    // This makes it render behind everything else.
+    gl_Position = pos.xyww; 
+}
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Glsl
+IGNORE_WHEN_COPYING_END
+
+shaders/skybox.frag:
+
+#version 330 core
+out vec4 FragColor;
+
+in vec3 TexCoords; // Direction vector from camera to cube vertex
+
+uniform samplerCube skybox; // Cubemap sampler
+
+void main() {    
+    FragColor = texture(skybox, TexCoords);
+}
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Glsl
+IGNORE_WHEN_COPYING_END
+
+Key Shader Points:
+
+skybox.vert:
+
+TexCoords = aPos;: The local vertex position of the skybox cube is used as the 3D texture coordinate to sample the cubemap.
+
+mat4 viewNoTranslation = mat4(mat3(view));: This clever trick removes the translation part of the view matrix. It ensures that no matter where the camera moves, the skybox remains centered around it, giving the illusion of being infinitely far away.
+
+gl_Position = pos.xyww;: This is a depth trick. By setting z/w = w/w = 1.0, all fragments of the skybox will have the maximum depth value (1.0). If you render the skybox first and then your scene with depth testing enabled (glDepthFunc(GL_LEQUAL) or GL_LESS), the skybox will always be drawn behind everything else. An alternative is to draw skybox last and set glDepthFunc(GL_LEQUAL).
+
+Step 33.4: Rendering the Skybox in main.cpp
+
+// In main.cpp
+
+// ... (includes, globals, callbacks, init functions) ...
+// ... (camera, player, maze, renderer, other shaders, other textures, other meshes) ...
+
+// Helper function loadCubemap (as defined above)
+
+int main() {
+    // ... (GLFW, GLAD, OpenGL setup) ...
+    // ... (Renderer, Maze, Player, Camera setup) ...
+    GLFWwindow* window = initializeWindow(); /* ... */
+    if (!initializeGLAD()) { /* ... */ }
+    setupOpenGL();
+    Renderer renderer; // Assuming renderer.Clear() will be used
+
+    int mazeGridW = 10; int mazeGridH = 8;
+    Maze gameMaze(mazeGridW, mazeGridH); gameMaze.GenerateMaze(0,0); gameMaze.PrintToConsole();
+    // ... (camera & player position setup) ...
+    camera.Position = glm::vec3( (float)mazeGridW / 2.0f, wallHeight * 0.75f , (float)mazeGridH / 2.0f );
+    camera.updateCameraVectors();
+    player = std::make_unique<Player>(camera); player->SetPosition(camera.Position, gameMaze);
+
+
+    // --- Shaders ---
+    Shader wallShader("shaders/wall.vert", "shaders/wall.frag"); /* ... */
+    Shader floorShader("shaders/floor.vert", "shaders/floor.frag"); /* ... */
+    Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag"); // New Skybox Shader
+    if (skyboxShader.ID == 0) { std::cerr << "Failed to load skybox shader." << std::endl; return -1; }
+    // (Error checks for other shaders)
+
+
+    // --- Textures ---
+    // ... (wallTexture, floorTexture, ceilingTexture, exitTexture) ...
+    // Load Cubemap Texture
+    std::vector<std::string> faces {
+        "textures/skybox/right.jpg", "textures/skybox/left.jpg",
+        "textures/skybox/top.jpg",   "textures/skybox/bottom.jpg",
+        "textures/skybox/front.jpg", "textures/skybox/back.jpg"
+    };
+    unsigned int cubemapTextureID = loadCubemap(faces);
+    if (cubemapTextureID == 0) { std::cerr << "Failed to load cubemap texture." << std::endl; return -1; }
+
+
+    // --- Meshes ---
+    // ... (cubeMesh, planeMesh, exitSignMesh) ...
+    // Skybox Mesh (using the simple 36-vertex skyboxVertices array)
+    float skyboxVertices[] = { /* ... as defined above (36 vertices * 3 floats) ... */
+        -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f
+    };
+    unsigned int skyboxVAO, skyboxVBO;
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0); // Position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
+
+
+    // Game state
+    GameState currentGameState = GameState::PLAYING;
+    glm::ivec2 exitCellCoords = {-1,-1}; /* ... find exit cell ... */
+    for(int y=0;y<gameMaze.GetHeight();++y) for(int x=0;x<gameMaze.GetWidth();++x) if(gameMaze.GetCell(x,y).isEnd) exitCellCoords={x,y};
+
+
+    // --- Game Loop ---
+    while (!glfwWindowShouldClose(window)) {
+        // ... (timing, input, player update, win condition check - same) ...
+        float currentFrame = static_cast<float>(glfwGetTime());deltaTime = currentFrame - lastFrame;lastFrame = currentFrame;
+        if(currentGameState == GameState::PLAYING){ processInput(window); if(player){player->Update(deltaTime, camera.Position, gameMaze);} if(player && player->CurrentCellX == exitCellCoords.x && player->CurrentCellY == exitCellCoords.y){currentGameState = GameState::WON; std::cout << "WON" << std::endl; glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);}}
+        else if (currentGameState == GameState::WON) { if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true); }
+
+
+        renderer.Clear(); // Clears color and depth
+        // renderer.BeginScene(camera, (float)SCR_WIDTH, (float)SCR_HEIGHT); // Not strictly needed if VP set per shader
+
+        glm::mat4 projection = camera.GetProjectionMatrix((float)SCR_WIDTH, (float)SCR_HEIGHT);
+        glm::mat4 view = camera.GetViewMatrix();
+
+
+        // --- Render Skybox ---
+        // Draw skybox first with depth testing trick, or last with glDepthFunc(GL_LEQUAL)
+        glDepthMask(GL_FALSE); // Turn off writing to the depth buffer
+        // OR use glDepthFunc(GL_LEQUAL); before drawing skybox if drawing it last
+        
+        skyboxShader.use();
+        glm::mat4 skyboxView = mat4(mat3(view)); // Remove translation from view matrix
+        skyboxShader.setMat4("view", skyboxView);
+        skyboxShader.setMat4("projection", projection);
+        skyboxShader.setInt("skybox", 0); // Tell shader to use texture unit 0
+
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTextureID);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glDepthMask(GL_TRUE); // Turn depth writing back on
+        // If using glDepthFunc(GL_LEQUAL), reset it: glDepthFunc(GL_LESS);
+
+
+        // --- Render Maze, Floor, Ceiling, Exit (as before) ---
+        // Ensure their shaders get the full 'view' matrix, not 'skyboxView'
+        // floorShader.use(); renderer.SetShaderMatrices(floorShader); // (Or set V/P directly)
+        // ... (floor, ceiling, walls, exit rendering, ensure you set correct view matrix)
+
+        // Example for floor:
+        floorShader.use();
+        floorShader.setMat4("view", view); // Use original view matrix
+        floorShader.setMat4("projection", projection);
+        // ... (rest of floor setup and submit)
+        floorTexture->Bind(0); floorShader.setInt("floorTexture", 0); floorShader.setBool("isCeiling", false);
+        glm::mat4 floorModel = glm::mat4(1.0f); /* ... */ floorModel = glm::translate(floorModel,glm::vec3((float)(mazeGridW-1)/2.0f,0.0f,(float)(mazeGridH-1)/2.0f)); floorModel = glm::scale(floorModel,glm::vec3((float)mazeGridW,1.0f,(float)mazeGridH));
+        renderer.Submit(floorShader, *planeMesh, floorModel);
+        
+        ceilingTexture->Bind(0); floorShader.setInt("floorTexture", 0); floorShader.setBool("isCeiling", true);
+        glm::mat4 ceilingModel = glm::mat4(1.0f); /* ... */ ceilingModel = glm::translate(ceilingModel,glm::vec3((float)(mazeGridW-1)/2.0f,wallHeight,(float)(mazeGridH-1)/2.0f)); ceilingModel = glm::scale(ceilingModel,glm::vec3((float)mazeGridW,1.0f,(float)mazeGridH));
+        renderer.Submit(floorShader, *planeMesh, ceilingModel);
+
+        wallShader.use();
+        wallShader.setMat4("view", view); // Use original view matrix
+        wallShader.setMat4("projection", projection);
+        // ... (rest of wall setup and submit loop)
+        wallTexture->Bind(0); wallShader.setInt("wallTexture", 0); // Sampler name from shader
+        // (Add lighting uniforms for walls too)
+        wallShader.setVec3("light_direction", lightDirGlobal); // Assuming lightDirGlobal is defined
+        wallShader.setVec3("light_color", lightColorGlobal);   // Assuming lightColorGlobal is defined
+        wallShader.setFloat("light_ambientIntensity", ambientIntensityGlobal);
+        wallShader.setVec3("viewPos", camera.Position);
+        wallShader.setFloat("material_shininess", materialShininessGlobal);
+        wallShader.setFloat("material_specularStrength", materialSpecularStrengthGlobal);
+
+        for (int y = 0; y < gameMaze.GetHeight(); ++y) { /* ... */ 
+            for (int x = 0; x < gameMaze.GetWidth(); ++x) {
+                // ... same wall rendering logic using renderer.Submit ...
+            }
+        }
+
+        // Exit Sign (ensure it uses the original 'view' matrix too)
+        if (exitCellCoords.x != -1) {
+            floorShader.use(); // Or exitShader
+            floorShader.setMat4("view", view);
+            floorShader.setMat4("projection", projection);
+            // ... (rest of exit sign setup and submit) ...
+            exitTexture->Bind(0); floorShader.setInt("floorTexture",0); floorShader.setBool("isCeiling",false);
+            glm::mat4 exitModel = glm::mat4(1.0f); /* ... calculate exitModel ... */
+            // (Copy the exitModel calculation from previous step)
+            renderer.Submit(floorShader, *exitSignMesh, exitModel);
+        }
+
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    // Cleanup Skybox VAO/VBO and cubemap texture
+    glDeleteVertexArrays(1, &skyboxVAO);
+    glDeleteBuffers(1, &skyboxVBO);
+    glDeleteTextures(1, &cubemapTextureID);
+
+    // ... (other cleanup) ...
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return 0;
+}
+
+// Define light globals if not already (example)
+glm::vec3 lightDirGlobal = glm::normalize(glm::vec3(0.5f, -1.0f, 0.7f));
+glm::vec3 lightColorGlobal = glm::vec3(1.0f, 1.0f, 0.9f);
+float ambientIntensityGlobal = 0.3f;
+float materialShininessGlobal = 32.0f;
+float materialSpecularStrengthGlobal = 0.4f;
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+C++
+IGNORE_WHEN_COPYING_END
+
+Key Changes in main.cpp for Skybox:
+
+Skybox Shader & Texture Loading: New skyboxShader and cubemapTextureID are loaded.
+
+Skybox VAO/VBO: Set up for the skyboxVertices. Note that this skybox mesh doesn't need texture coordinates or normals in its VBO because the fragment shader samples the cubemap using the vertex position itself.
+
+Render Loop Order and Depth Testing for Skybox:
+
+glDepthMask(GL_FALSE); is called before drawing the skybox. This prevents the skybox from writing to the depth buffer. Because its vertices are manipulated to always be at z/w = 1.0 (far plane), if it wrote to depth, it might occlude parts of the scene that are also far away.
+
+Alternatively, if you draw skybox last: Set glDepthFunc(GL_LEQUAL); before drawing skybox, draw it, then reset glDepthFunc(GL_LESS);. The pos.xyww trick in the vertex shader ensures its depth is 1.0, so GL_LEQUAL will pass the depth test if the fragment being written to is currently 1.0 (cleared depth buffer or other skybox fragments).
+
+skyboxView = mat4(mat3(view)); gets the view matrix without translation.
+
+glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTextureID); binds the cubemap.
+
+glDrawArrays(GL_TRIANGLES, 0, 36); draws the skybox.
+
+glDepthMask(GL_TRUE); re-enables depth writing for the rest of the scene.
+
+View Matrix for Scene: Ensure that after rendering the skybox, the regular scene objects (maze, floor, etc.) are rendered using the original view matrix (with translation), not the skyboxView. My example now sets view/projection per shader group.
+
+Lighting Uniforms: Make sure you're still setting lighting uniforms for your wall and floor shaders. I added placeholders lightDirGlobal, etc. you'll need to define these or pass them from where you set them up in the previous step.
+
+Before Running:
+
+Get Skybox Textures: Find/create 6 skybox images (e.g., search for "cubemap textures" or "skybox images"). Make sure they align correctly at the edges. Put them in textures/skybox/.
+
+Update Texture Paths: In main.cpp, ensure the faces vector in loadCubemap points to your actual skybox image files.
+
+Copy textures folder (including skybox subfolder) to build/bin/.
+
+Create shaders/skybox.vert and shaders/skybox.frag with the provided code.
+
+Add them to your build/bin/shaders/ directory.
+
+Re-run CMake, build.
+
+Expected Outcome:
+
+You should see a sky (or whatever your cubemap images depict) surrounding your entire maze.
+
+As you move and look around, the skybox should stay fixed relative to the distant horizon, creating a much more immersive environment.
+
+This will be another significant visual improvement! Let me know how it goes.

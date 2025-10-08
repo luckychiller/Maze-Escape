@@ -1,14 +1,19 @@
+// main.cpp - Maze Escape main entry point
+
+// --- Standard Library Includes ---
 #include <iostream>
 #include <vector>
 #include <memory>
 
+// --- External Library Includes ---
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <stb_image.h>
 
+// --- Project Includes ---
 #include "Graphics/Shader.h"
 #include "Graphics/Camera.h"
 #include "Game/Maze.h"
@@ -17,74 +22,29 @@
 #include "Graphics/Texture.h"
 #include "Game/Player.h"
 #include "Game/GameLogic.h"
+#include "Graphics/GLUtils.h"
+#include "Utils/Utils.h"
 
-// Window dimensions
-unsigned int SCR_WIDTH = 1280;
-unsigned int SCR_HEIGHT = 720;
-
-// Camera
-Camera camera(glm::vec3(0.0f, 1.0f, 3.0f));
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
-bool firstMouse = true;
-
-// Time
-float deltaTime = 0.0f; // Time between current frame and last frame
-float lastFrame = 0.0f; // Time of last frame
-
-// Key press debounce
-bool pKeyPressed = false;
-
-// Maze properties
-const float wallHeight = 2.0f;
-const float wallThickness = 0.1f;
-
-// GLFW error callback function
-void glfw_error_callback(int error, const char *description)
-{
-    std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
+// --- Global State (grouped in a namespace for clarity) ---
+namespace Globals {
+    unsigned int SCR_WIDTH = 1280;
+    unsigned int SCR_HEIGHT = 720;
+    Camera camera(glm::vec3(0.0f, 1.0f, 3.0f));
+    float lastX = SCR_WIDTH / 2.0f;
+    float lastY = SCR_HEIGHT / 2.0f;
+    bool firstMouse = true;
+    float deltaTime = 0.0f;
+    float lastFrame = 0.0f;
+    bool pKeyPressed = false;
+    const float wallHeight = 2.0f;
+    const float wallThickness = 0.1f;
+    Player *g_Player = nullptr;
+    Maze *g_Maze = nullptr;
+    GameLogic *g_GameLogic = nullptr;
 }
+using namespace Globals;
 
-// GLFW framebuffer size callback function
-void framebuffer_size_callback(GLFWwindow *window, int width, int height)
-{
-    glViewport(0, 0, width, height);
-    SCR_WIDTH = width;   // Update globals
-    SCR_HEIGHT = height; // Update globals
-}
-
-// Mouse callback function
-void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
-{
-    float xpos = static_cast<float>(xposIn); // Convert to float
-    float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse)
-    { // first time mouse is moved
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
-    }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-    lastX = xpos;
-    lastY = ypos;
-
-    camera.ProcessMouseMovement(xoffset, yoffset);
-}
-
-// Scroll callback function
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
-{
-    camera.ProcessMouseScroll(static_cast<float>(yoffset));
-}
-
-// Forward declaration for processInput
-Player* g_Player = nullptr;
-Maze* g_Maze = nullptr;
-GameLogic* g_GameLogic = nullptr;
-
+// --- Utility and Callback Functions ---
 // Process player movement from keys input
 void processInput(GLFWwindow *window)
 {
@@ -148,95 +108,23 @@ void processInput(GLFWwindow *window)
     }
 }
 
-// Generate indices for a cube
-std::vector<unsigned int> GenerateIndices(const float *vertices)
+// --- Main Function ---
+int main()
 {
-    std::vector<unsigned int> indices;
-    for (int i = 0; i < 8; i++)
-    {
-        for (int j = i + 1; j < 8; j++)
-        {
-            for (int k = j + 1; k < 8; k++)
-            {
-                // Check all unique triplets
-                if (i != j && j != k && i != k)
-                {
-                    indices.push_back(i);
-                    indices.push_back(j);
-                    indices.push_back(k);
-                }
-            }
-        }
-    }
-    return indices;
-}
-
-// Initialize GLFW and create window
-GLFWwindow *initializeWindow()
-{
-    glfwSetErrorCallback(glfw_error_callback);
-    if (!glfwInit())
-    {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return nullptr;
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow *window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Maze Escape", NULL, NULL);
-    if (window == NULL)
-    {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return nullptr;
-    }
-    glfwMakeContextCurrent(window);
-    // glfwFocusWindow(window); // Usually not needed, MakeContextCurrent implies focus for input
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    return window;
-}
-
-// Initialize GLAD
-bool initializeGLAD()
-{
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        return false;
-    }
-
-    const GLubyte *renderer = glGetString(GL_RENDERER);
-    const GLubyte *version = glGetString(GL_VERSION);
-    std::cout << "Renderer: " << renderer << std::endl;
-    std::cout << "OpenGL version supported: " << version << std::endl;
-
-    return true;
-}
-
-// Setup OpenGL state
-void setupOpenGL()
-{
-    glEnable(GL_DEPTH_TEST);
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // Uncomment to see wireframe
-}
-
-
-int main() {
-    GLFWwindow* window = initializeWindow();
-    if (!window) {return -1;}
-
-    if (!initializeGLAD())
-    {
-        glfwDestroyWindow(window);
-        glfwTerminate();
+    // --- Initialization ---
+    GLFWwindow *window = InitializeWindow(Globals::SCR_WIDTH, Globals::SCR_HEIGHT, "Maze Escape");
+    if (!window){
+        
+    system("pause");
         return -1;
     }
-    setupOpenGL(); // Initial viewport set by framebuffer_callback or GLAD init
-
+    if (!InitializeGLAD()) {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+    system("pause");
+        return -1;
+    }
+    SetupOpenGL();
     Renderer renderer;
 
     // Create and generate maze
@@ -250,7 +138,7 @@ int main() {
     g_Maze = &gameMaze;
 
     // Position camera within the maze
-    camera.Position = glm::vec3( (float)mazeGridW / 2.0f, wallHeight / 2.0f, (float)mazeGridH / 2.0f );
+    camera.Position = glm::vec3((float)mazeGridW / 2.0f, wallHeight / 2.0f, (float)mazeGridH / 2.0f);
     camera.UpdateCameraVectors();
 
     // Create player and game logic
@@ -273,13 +161,27 @@ int main() {
     if (wallShader.ID == 0)
     {
         /* error handling */
-        std::cerr << "Failed to load wall shader." << std::endl; return -1;
+        std::cerr << "Failed to load wall shader." << std::endl;
+    system("pause");
+        return -1;
     }
 
     Shader floorShader("shaders/floor.vert", "shaders/floor.frag");
-    if (floorShader.ID == 0) {
+    if (floorShader.ID == 0)
+    {
         /* error handling */
-        std::cerr << "Failed to load floor shader." << std::endl; return -1;
+        std::cerr << "Failed to load floor shader." << std::endl;
+    system("pause");
+        return -1;
+    }
+
+    Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag"); // New Skybox Shader
+    if (skyboxShader.ID == 0)
+    {
+        /* error handling */
+        std::cerr << "Failed to load skybox shader." << std::endl;
+    system("pause");
+        return -1;
     }
 
     // --- Load Textures ---
@@ -287,45 +189,77 @@ int main() {
     std::unique_ptr<Texture> floorTexture = std::make_unique<Texture>("textures/floor.jpg");
     std::unique_ptr<Texture> ceilingTexture = std::make_unique<Texture>("textures/ceiling.jpg");
     std::unique_ptr<Texture> exitTexture = std::make_unique<Texture>("textures/exit.jpg");
+    
+    std::vector<std::string> faces {
+        "textures/skybox/right.png", "textures/skybox/left.png",
+        "textures/skybox/top.png",   "textures/skybox/bottom.png",
+        "textures/skybox/front.png", "textures/skybox/back.png"
+    };
+    unsigned int cubemapTextureID = LoadCubemap(faces);
+    if (cubemapTextureID == 0) { std::cerr << "Failed to load cubemap texture." << std::endl; return -1; }
+
+
 
     // Cube vertices for walls with proper texture coordinates for each face
     std::vector<Vertex> cubeVerticesData = {
         // Back face
-        {{ -0.5f, -0.5f, -0.5f }, {0.0f, 0.0f}}, // Bottom-left
-        {{  0.5f, -0.5f, -0.5f }, {1.0f, 0.0f}}, // Bottom-right
-        {{  0.5f,  0.5f, -0.5f }, {1.0f, 1.0f}}, // Top-right
-        {{ -0.5f,  0.5f, -0.5f }, {0.0f, 1.0f}}, // Top-left
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}}, // Bottom-left
+        {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},  // Bottom-right
+        {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},   // Top-right
+        {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},  // Top-left
 
         // Front face
-        {{ -0.5f, -0.5f,  0.5f }, {0.0f, 0.0f}}, // Bottom-left
-        {{  0.5f, -0.5f,  0.5f }, {1.0f, 0.0f}}, // Bottom-right
-        {{  0.5f,  0.5f,  0.5f }, {1.0f, 1.0f}}, // Top-right
-        {{ -0.5f,  0.5f,  0.5f }, {0.0f, 1.0f}}, // Top-left
+        {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}}, // Bottom-left
+        {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},  // Bottom-right
+        {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},   // Top-right
+        {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},  // Top-left
 
         // Left face
-        {{ -0.5f,  0.5f,  0.5f }, {1.0f, 0.0f}}, // Top-right
-        {{ -0.5f,  0.5f, -0.5f }, {1.0f, 1.0f}}, // Top-left
-        {{ -0.5f, -0.5f, -0.5f }, {0.0f, 1.0f}}, // Bottom-left
-        {{ -0.5f, -0.5f,  0.5f }, {0.0f, 0.0f}}, // Bottom-right
+        {{-0.5f, 0.5f, 0.5f}, {1.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},   // Top-right
+        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}},  // Top-left
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}}, // Bottom-left
+        {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},  // Bottom-right
 
         // Right face
-        {{  0.5f,  0.5f,  0.5f }, {0.0f, 0.0f}}, // Top-left
-        {{  0.5f,  0.5f, -0.5f }, {1.0f, 0.0f}}, // Top-right
-        {{  0.5f, -0.5f, -0.5f }, {1.0f, 1.0f}}, // Bottom-right
-        {{  0.5f, -0.5f,  0.5f }, {0.0f, 1.0f}}, // Bottom-left
+        {{0.5f, 0.5f, 0.5f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},   // Top-left
+        {{0.5f, 0.5f, -0.5f}, {1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},  // Top-right
+        {{0.5f, -0.5f, -0.5f}, {1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}}, // Bottom-right
+        {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},  // Bottom-left
 
         // Bottom face
-        {{ -0.5f, -0.5f, -0.5f }, {0.0f, 1.0f}}, // Top-left
-        {{  0.5f, -0.5f, -0.5f }, {1.0f, 1.0f}}, // Top-right
-        {{  0.5f, -0.5f,  0.5f }, {1.0f, 0.0f}}, // Bottom-right
-        {{ -0.5f, -0.5f,  0.5f }, {0.0f, 0.0f}}, // Bottom-left
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}}, // Top-left
+        {{0.5f, -0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},  // Top-right
+        {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},   // Bottom-right
+        {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},  // Bottom-left
 
         // Top face
-        {{ -0.5f,  0.5f, -0.5f }, {0.0f, 0.0f}}, // Bottom-left
-        {{  0.5f,  0.5f, -0.5f }, {1.0f, 0.0f}}, // Bottom-right
-        {{  0.5f,  0.5f,  0.5f }, {1.0f, 1.0f}}, // Top-right
-        {{ -0.5f,  0.5f,  0.5f }, {0.0f, 1.0f}}  // Top-left
+        {{-0.5f, 0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}}, // Bottom-left
+        {{0.5f, 0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},  // Bottom-right
+        {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},   // Top-right
+        {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}}   // Top-left
     };
+
+    float skyboxVertices[] = {
+    // positions
+    -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+
+     1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+
+    -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f
+};
+
 
     // Now we have 24 vertices (4 for each face) with proper texture coordinates
     // Update indices to match the new vertex layout
@@ -345,28 +279,50 @@ int main() {
 
     // --- Define Vertices for Plane (Floor/Ceiling) ---
     std::vector<Vertex> planeVerticesData = {
-        {{  0.5f, 0.0f,  0.5f }, { (float)mazeGridW, (float)mazeGridH }}, // Top Right
-        {{  0.5f, 0.0f, -0.5f }, { (float)mazeGridW, 0.0f            }}, // Bottom Right
-        {{ -0.5f, 0.0f, -0.5f }, { 0.0f,            0.0f            }}, // Bottom Left
-        {{ -0.5f, 0.0f,  0.5f }, { 0.0f,            (float)mazeGridH }}  // Top Left
+        {{0.5f, 0.0f, 0.5f}, {(float)mazeGridW, (float)mazeGridH}, {0.0f, 1.0f, 0.0f}}, // Top Right
+        {{0.5f, 0.0f, -0.5f}, {(float)mazeGridW, 0.0f}, {0.0f, 1.0f, 0.0f}},            // Bottom Right
+        {{-0.5f, 0.0f, -0.5f}, {0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},                       // Bottom Left
+        {{-0.5f, 0.0f, 0.5f}, {0.0f, (float)mazeGridH}, {0.0f, 1.0f, 0.0f}}             // Top Left
     };
-    std::vector<unsigned int> planeIndicesData = { 0, 1, 3, 1, 2, 3 };
+    std::vector<unsigned int> planeIndicesData = {0, 1, 3, 1, 2, 3};
     std::unique_ptr<Mesh> planeMesh = std::make_unique<Mesh>(planeVerticesData, planeIndicesData);
 
-
     // Create exit marker mesh (a simple colored cube)
-    std::vector<Vertex> exitMarkerVerticesData = cubeVerticesData; // Use same vertices as cube
+    std::vector<Vertex> exitMarkerVerticesData = cubeVerticesData;     // Use same vertices as cube
     std::vector<unsigned int> exitMarkerIndicesData = cubeIndicesData; // Use same indices as cube
     std::unique_ptr<Mesh> exitMarkerMesh = std::make_unique<Mesh>(exitMarkerVerticesData, exitMarkerIndicesData);
 
     // Create exit marker shader
     Shader exitMarkerShader("shaders/exit.vert", "shaders/exit.frag");
-    if (exitMarkerShader.ID == 0) {
-        std::cerr << "Failed to load exit marker shader." << std::endl; return -1;
+    if (exitMarkerShader.ID == 0)
+    {
+        std::cerr << "Failed to load exit marker shader." << std::endl;
+    system("pause");
+        return -1;
     }
 
+    
+    unsigned int skyboxVAO, skyboxVBO;
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0); // Position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glBindVertexArray(0);
+
+
+    // Light properties
+    glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, -1.0f, 0.7f)); // Direction FROM light source
+    glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 0.9f);                // Slightly yellowish white
+    float ambientIntensity = 0.3f;
+    float materialShininess = 32.0f;
+    float materialSpecularStrength = 0.4f; // For walls and floor
+
     // --- Game Loop ---
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window))
+    {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -378,28 +334,47 @@ int main() {
         gameLogic.Update(deltaTime);
 
         // Print maze with player position when P key is pressed (with debounce)
-        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
-            if (!pKeyPressed) {
+        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
+        {
+            if (!pKeyPressed)
+            {
                 // Clear console (Windows-specific)
                 system("cls");
                 // Print maze with player position
                 gameMaze.PrintToConsole(player.GetCurrentCell());
                 pKeyPressed = true;
             }
-        } else {
+        }
+        else
+        {
             pKeyPressed = false;
         }
 
-        renderer.Clear(); // Use renderer to clear screen
+        // --- Prepare View and Projection Matrices ---
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+
+        // --- Render Skybox ---
+        RenderSkybox(skyboxShader, skyboxVAO, cubemapTextureID, view, projection);
+
+        // --- Render Scene ---
         renderer.BeginScene(camera, (float)SCR_WIDTH, (float)SCR_HEIGHT);
 
-        floorShader.use(); // Activate shader before setting uniforms
+        floorShader.use();                       // Activate shader before setting uniforms
         renderer.SetShaderMatrices(floorShader); // Set view and projection matrices
 
         // Set texture for floor
-        floorTexture->Bind(0); // Bind to texture unit 0
-        floorShader.setInt("floorTexture", 0); // Tell shader to use texture unit 0
+        floorTexture->Bind(0);                   // Bind to texture unit 0
+        floorShader.setInt("floorTexture", 0);   // Tell shader to use texture unit 0
         floorShader.setBool("isCeiling", false); // This is the floor
+
+        // Set lighting uniforms for floorShader
+        floorShader.setVec3("light_direction", lightDir);
+        floorShader.setVec3("light_color", lightColor);
+        floorShader.setFloat("light_ambientIntensity", ambientIntensity);
+        floorShader.setVec3("viewPos", camera.Position);
+        floorShader.setFloat("material_shininess", materialShininess);                      // Could be different for floor
+        floorShader.setFloat("material_specularStrength", materialSpecularStrength * 0.5f); // Floor less shiny
 
         glm::mat4 floorModel = glm::mat4(1.0f);
         floorModel = glm::translate(floorModel, glm::vec3((float)(mazeGridW - 1) / 2.0f, 0.0f, (float)(mazeGridH - 1) / 2.0f));
@@ -407,8 +382,8 @@ int main() {
         renderer.Submit(floorShader, *planeMesh, floorModel);
 
         // Set texture for ceiling (can use a different texture or the same with a modifier)
-        ceilingTexture->Bind(0); // Bind to texture unit 0
-        floorShader.setInt("floorTexture", 0); // Tell shader to use texture unit 0
+        ceilingTexture->Bind(0);                // Bind to texture unit 0
+        floorShader.setInt("floorTexture", 0);  // Tell shader to use texture unit 0
         floorShader.setBool("isCeiling", true); // This is the ceiling
 
         glm::mat4 ceilingModel = glm::mat4(1.0f);
@@ -421,35 +396,49 @@ int main() {
         renderer.SetShaderMatrices(wallShader); // Set view and projection matrices
 
         // Set texture for walls
-        wallTexture->Bind(0); // Bind to texture unit 0
+        wallTexture->Bind(0);                // Bind to texture unit 0
         wallShader.setInt("wallTexture", 0); // Tell shader to use texture unit 0
 
-        for (int y = 0; y < gameMaze.GetHeight(); ++y) {
-            for (int x = 0; x < gameMaze.GetWidth(); ++x) {
-                const Cell& cell = gameMaze.GetCell(x, y);
+        // Set lighting uniforms for wallShader
+        wallShader.setVec3("light_direction", lightDir);
+        wallShader.setVec3("light_color", lightColor);
+        wallShader.setFloat("light_ambientIntensity", ambientIntensity);
+        wallShader.setVec3("viewPos", camera.Position);
+        wallShader.setFloat("material_shininess", materialShininess);
+        wallShader.setFloat("material_specularStrength", materialSpecularStrength);
+
+        for (int y = 0; y < gameMaze.GetHeight(); ++y)
+        {
+            for (int x = 0; x < gameMaze.GetWidth(); ++x)
+            {
+                const Cell &cell = gameMaze.GetCell(x, y);
                 glm::vec3 cellOrigin = glm::vec3(static_cast<float>(x), 0.0f, static_cast<float>(y));
 
-                if (cell.wallTop) {
+                if (cell.wallTop)
+                {
                     glm::mat4 model = glm::mat4(1.0f);
-                    model = glm::translate(model, cellOrigin + glm::vec3(0.5f, wallHeight / 2.0f, 0.0f) );
+                    model = glm::translate(model, cellOrigin + glm::vec3(0.5f, wallHeight / 2.0f, 0.0f));
                     model = glm::scale(model, glm::vec3(1.0f, wallHeight, wallThickness));
                     renderer.Submit(wallShader, *cubeMesh, model);
                 }
-                if (cell.wallBottom) {
+                if (cell.wallBottom)
+                {
                     glm::mat4 model = glm::mat4(1.0f);
-                    model = glm::translate(model, cellOrigin + glm::vec3(0.5f, wallHeight / 2.0f, 1.0f) );
+                    model = glm::translate(model, cellOrigin + glm::vec3(0.5f, wallHeight / 2.0f, 1.0f));
                     model = glm::scale(model, glm::vec3(1.0f, wallHeight, wallThickness));
                     renderer.Submit(wallShader, *cubeMesh, model);
                 }
-                if (cell.wallLeft) {
+                if (cell.wallLeft)
+                {
                     glm::mat4 model = glm::mat4(1.0f);
-                    model = glm::translate(model, cellOrigin + glm::vec3(0.0f, wallHeight / 2.0f, 0.5f) );
+                    model = glm::translate(model, cellOrigin + glm::vec3(0.0f, wallHeight / 2.0f, 0.5f));
                     model = glm::scale(model, glm::vec3(wallThickness, wallHeight, 1.0f));
                     renderer.Submit(wallShader, *cubeMesh, model);
                 }
-                if (cell.wallRight) {
+                if (cell.wallRight)
+                {
                     glm::mat4 model = glm::mat4(1.0f);
-                    model = glm::translate(model, cellOrigin + glm::vec3(1.0f, wallHeight / 2.0f, 0.5f) );
+                    model = glm::translate(model, cellOrigin + glm::vec3(1.0f, wallHeight / 2.0f, 0.5f));
                     model = glm::scale(model, glm::vec3(wallThickness, wallHeight, 1.0f));
                     renderer.Submit(wallShader, *cubeMesh, model);
                 }
@@ -480,7 +469,7 @@ int main() {
             // You could add a 2D overlay with text or a simple colored quad
         }
 
-        // renderer.EndScene(); // Call if it does something
+        renderer.EndScene();
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -488,5 +477,6 @@ int main() {
 
     glfwDestroyWindow(window);
     glfwTerminate();
+    system("pause");
     return 0;
 }

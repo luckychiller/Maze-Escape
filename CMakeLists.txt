@@ -25,11 +25,14 @@ set(SOURCES
     src/Graphics/Renderer.cpp
     src/Graphics/Shader.cpp
     src/Graphics/Texture.cpp
+    src/Graphics/GLUtils.cpp
     src/Game/Maze.cpp
     src/Game/Player.cpp
     src/Game/GameLogic.cpp
     src/Utils/FileSystem.cpp
     src/Utils/Logging.cpp
+    src/Utils/Utils.h
+
 )
 
 # Add header files
@@ -47,11 +50,13 @@ set(HEADERS
     src/Graphics/Renderer.h
     src/Graphics/Shader.h
     src/Graphics/Texture.h
+    src/Graphics/GLUtils.h
     src/Game/Maze.h
     src/Game/Player.h
     src/Game/GameLogic.h
     src/Utils/FileSystem.h
     src/Utils/Logging.h
+    src/Utils/Utils.h
 )
 
 # Create executable
